@@ -13,6 +13,8 @@ import org.springframework.integration.channel.DirectChannel;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHandler;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 @SpringBootApplication
 public class EventReaderApplication {
 
@@ -42,7 +44,7 @@ public class EventReaderApplication {
     @ServiceActivator(inputChannel = "pubsubInputChannel")
     public MessageHandler messageReceiver() {
         return message -> {
-            System.out.println("Data : " + message.getPayload());
+            System.out.println("Data : " + new String((byte[]) message.getPayload(), UTF_8));
             System.out.println("Header : " + message.getHeaders());
         };
     }
