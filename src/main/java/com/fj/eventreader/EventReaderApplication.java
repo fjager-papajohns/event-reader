@@ -1,51 +1,51 @@
 package com.fj.eventreader;
 
-import com.google.cloud.pubsub.v1.AckReplyConsumer;
-import com.google.cloud.pubsub.v1.MessageReceiver;
-import com.google.cloud.pubsub.v1.Subscriber;
-import com.google.pubsub.v1.ProjectSubscriptionName;
-import com.google.pubsub.v1.PubsubMessage;
-
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.gcp.pubsub.core.PubSubOperations;
+import org.springframework.cloud.gcp.pubsub.integration.AckMode;
+import org.springframework.cloud.gcp.pubsub.integration.inbound.PubSubInboundChannelAdapter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.integration.annotation.ServiceActivator;
+import org.springframework.integration.channel.DirectChannel;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 @SpringBootApplication
 public class EventReaderApplication {
 
-	public static void main(String[] args) throws InterruptedException {
-		SpringApplication.run(EventReaderApplication.class, args);
+    @Value("${pubsub.subscription.name}")
+    private String subscriptionName;
 
-    
-    String projectId = Config.ProjectID;
-    String subscriptionId = Config.SubscriptionName;
-
-    ProjectSubscriptionName subscriptionName = ProjectSubscriptionName.of(projectId, subscriptionId);
-    // Instantiate an asynchronous message receiver
-    MessageReceiver receiver =
-        new MessageReceiver() {
-          @Override
-          public void receiveMessage(PubsubMessage message, AckReplyConsumer consumer) {
-            // handle incoming message, then ack/nack the received message
-            System.out.println("Data : " + message.getData().toStringUtf8());
-            System.out.println("");
-            consumer.ack();
-          }
-        };
-
-    Subscriber subscriber = null;
-    try {
-      // Create a subscriber for "my-subscription-id" bound to the message receiver
-      subscriber = Subscriber.newBuilder(subscriptionName, receiver).build();
-      subscriber.startAsync();
-      // ...
-    } finally {
-
-      Thread.sleep(999999999);
-
-      // stop receiving messages
-      if (subscriber != null) {
-        subscriber.stopAsync();
-      }
+	public static void main(String[] args) {
+        SpringApplication.run(EventReaderApplication.class, args);
     }
-	}
+
+    @Bean
+    public PubSubInboundChannelAdapter messageChannelAdapter(
+            @Qualifier("pubsubInputChannel") MessageChannel inputChannel,
+            PubSubOperations pubSubTemplate) {
+        PubSubInboundChannelAdapter adapter = new PubSubInboundChannelAdapter(pubSubTemplate, subscriptionName);
+        adapter.setOutputChannel(inputChannel);
+        adapter.setAckMode(AckMode.AUTO);
+        return adapter;
+    }
+
+    @Bean
+    public MessageChannel pubsubInputChannel() {
+        return new DirectChannel();
+    }
+
+    @Bean
+    @ServiceActivator(inputChannel = "pubsubInputChannel")
+    public MessageHandler messageReceiver() {
+        return message -> {
+            System.out.println("Data : " + new String((byte[]) message.getPayload(), UTF_8));
+            System.out.println("Header : " + message.getHeaders());
+        };
+    }
 }
